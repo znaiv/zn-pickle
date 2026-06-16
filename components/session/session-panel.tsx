@@ -10,7 +10,6 @@ import { gameTypeLabel } from "@/lib/session/game-type";
 import { matchingModeLabel } from "@/lib/session/rotation";
 import { saveLastSession } from "@/lib/session/local-resume";
 import {
-  Copy,
   ExternalLink,
   Loader2,
   Plus,
@@ -98,7 +97,6 @@ export function SessionPanel({ sessionId, readOnly = false }: SessionPanelProps)
   const [state, setState] = useState<SessionState | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
   const [confirmingWin, setConfirmingWin] = useState(false);
@@ -109,6 +107,7 @@ export function SessionPanel({ sessionId, readOnly = false }: SessionPanelProps)
   const [endingSession, setEndingSession] = useState(false);
   const [endSessionOpen, setEndSessionOpen] = useState(false);
   const [endSessionError, setEndSessionError] = useState<string | null>(null);
+  const [randomCheckingIn, setRandomCheckingIn] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/sessions/${sessionId}`);
@@ -218,14 +217,6 @@ export function SessionPanel({ sessionId, readOnly = false }: SessionPanelProps)
     if (res.ok) await refresh();
   }
 
-  function copyLiveLink() {
-    if (!state) return;
-    const url = `${window.location.origin}${state.liveUrl}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   if (loading || !state) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -302,10 +293,6 @@ export function SessionPanel({ sessionId, readOnly = false }: SessionPanelProps)
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Button variant="secondary" size="sm" href="/session/new">
                 Exit
-              </Button>
-              <Button variant="secondary" size="sm" onClick={copyLiveLink}>
-                <Copy className="h-4 w-4" />
-                {copied ? "Copied!" : "Copy live link"}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setQrOpen(true)}>
                 <QrCode className="h-4 w-4" />
@@ -524,14 +511,21 @@ export function SessionPanel({ sessionId, readOnly = false }: SessionPanelProps)
                     type="button"
                     size="sm"
                     variant="secondary"
-                    disabled={isEnded}
-                    onClick={() => {
-                      const pick =
-                        uncheckedPlayers[Math.floor(Math.random() * uncheckedPlayers.length)];
-                      if (pick) checkIn(pick.id);
+                    disabled={isEnded || randomCheckingIn}
+                    onClick={async () => {
+                      if (uncheckedPlayers.length === 0) return;
+                      setRandomCheckingIn(true);
+                      const shuffled = [...uncheckedPlayers].sort(() => Math.random() - 0.5);
+                      for (const p of shuffled) {
+                        await fetch(`/api/sessions/${sessionId}/players/${p.id}/check-in`, {
+                          method: "POST",
+                        });
+                      }
+                      setRandomCheckingIn(false);
+                      await refresh();
                     }}
                   >
-                    Random check-in
+                    {randomCheckingIn ? "Randomizing…" : "Random check-in all"}
                   </Button>
                 </div>
               )}
